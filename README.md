@@ -1,6 +1,6 @@
 # Acrostician
 
-Give it a word and it'll build you an acrostic poem from [n-grams|http://en.wikipedia.org/wiki/N-gram] built from a
+Give it a word and it'll build you an acrostic poem from [n-grams](http://en.wikipedia.org/wiki/N-gram) built from a
 vocabulary it scraped off of the Twitter public stream. I, Brian Gawalt, handle a bot, 
 [@acrostician](http://twitter.com/acrostician) which is managed by this code. This README is a rundown of the bot's
 typical behavior, BUT, there are some easter eggs inside (and more to come), so don't read the code if you'd like
