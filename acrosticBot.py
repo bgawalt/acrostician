@@ -43,6 +43,12 @@ def firstChar(word):
         return word[1]
     return word[0]
 
+def getNgrams(text):
+    cleanWords = [w.strip("""./?<>!,:;-+&*"'""") for w
+                          in text.lower().split()]
+    cleanNonemptyWords = [cw for cw in cleanWords if len(cw) > 0]
+    return subseqs(cleanNonemptyWords)
+
 def initials(words):
     firstChars = [firstChar(word).lower() for word in words if len(word) > 0]
     return "".join(firstChars)
@@ -65,28 +71,32 @@ def scrapeTwitter(acrostic, api, dbpath):
 
         for n in xrange(1, acrosN+1):
             s = str(n)
-            cur.execute("create table if not exists GRAM_"+s+" (Term text, Initials text, Count integer, Used integer);")
-            cur.execute("create unique index if not exists IDX_TERM_GRAM_"+s+" on GRAM_"+s+" (Term);")
-            cur.execute("create index if not exists IDX_INIT_GRAM_"+s+" on GRAM_"+s+" (Initials);")
+            cur.execute("create table if not exists GRAM_" + s +
+                " (Term text, Initials text, Count integer, Used integer);")
+            cur.execute("create unique index if not exists IDX_TERM_GRAM_" + s +
+                        " on GRAM_"+s+" (Term);")
+            cur.execute("create index if not exists IDX_INIT_GRAM_" + s +
+                        " on GRAM_"+s+" (Initials);")
             conn.commit()
 
         for text in l.texts:
-            cleanWords = [w.strip("""./?<>!,:;-+&*"'""") for w in text.lower().split()]
-            words = [w for w in cleanWords if len(w) > 0]
-            ngrams = [s for s in subseqs(words) if initials(s) in subAcros]
+            ngrams = [s for s in getNgrams(text) if initials(s) in subAcros]
             for n in ngrams:
                 term = " ".join(n)
                 if "http" in term.lower() or acrostic in term.lower():
                     continue
                 inits = initials(n)
-                cur.execute("select Count from GRAM_"+str(len(n))+" where Term=:term", {"term": term})
+                cur.execute("select Count from GRAM_" + str(len(n)) +
+                            " where Term=:term", {"term": term})
                 results = cur.fetchall()
                 if len(results) == 0:
                     count = 1
-                    cur.execute("insert into GRAM_"+str(len(n))+" values (?,?,?,1)", (term, inits, count))
+                    cur.execute("insert into GRAM_" + str(len(n)) +
+                                " values (?,?,?,1)", (term, inits, count))
                 else: 
                     count = 1 + results[0][0]
-                    cur.execute("update GRAM_"+str(len(n))+" set Count=? where Term=?", (count, term))
+                    cur.execute("update GRAM_" + str(len(n)) +
+                                " set Count=? where Term=?", (count, term))
                 conn.commit()
         conn.commit()
 
@@ -102,16 +112,24 @@ def capitalizeTweet(tw):
     return "\n".join(out)
 
 def scoreTup(t):
-    raw = t[2]*(2*len(t[1])+len(t[0]))/t[3]
-    if t[0][0] == "#":
+    """
+    Score an ngram tuple returned from a database ngram table. A higher scoring
+    term is more deserving of inclusion in the resulting acrostic
+    :param t: (Term string, initials string, Corpus count, Used count)
+    :return: Fitness score for this term
+    """
+    term = t[0]
+    inits = t[1]
+    pop = t[2]
+    used = t[3]
+    raw = len(term)*(float(pop)/(10*used))**(2*len(inits))
+    if "#" in term:
         return 10*raw
     else:
         return raw
 
-def postTweet(target, api, dbpath):
-
+def postTweet(target, api, dbpath, testOnly = False):
     targetLen = len(target)
-
     with sqlite3.connect(dbpath+"/"+target+".db") as conn:
         cur = conn.cursor()
 
@@ -127,7 +145,10 @@ def postTweet(target, api, dbpath):
                 wordsLeft = targetLen - tweetWordCount
                 options = []
                 while len(options) < 200 and wordsLeft > 0:
-                    cur.execute("select Term, Initials, Count, Used from GRAM_"+str(wordsLeft)+" where Initials=? order by random() limit 200", (desiredInits[:wordsLeft],))
+                    cur.execute("select Term, Initials, Count, Used from GRAM_"+
+                                str(wordsLeft)+" where Initials=? order by "+
+                                "random() limit 200",
+                                (desiredInits[:wordsLeft],))
                     for tup in cur.fetchall():
                         if target not in tup[0]:
                             options.append(tup)
@@ -135,7 +156,7 @@ def postTweet(target, api, dbpath):
                 if len(options) == 0:
                     print "DAMMIT",tweet,desiredInits
                     raise RuntimeError
-                totalCount = sum([scoreTup(o) for o in options])
+                totalCount = int(sum([scoreTup(o) for o in options]))
 
                 r = random.randint(1, totalCount)
                 i = 0
@@ -146,28 +167,49 @@ def postTweet(target, api, dbpath):
                     i = i + 1
                 if r > 0:
                     newWord = options[-1][0]
-                    newUsed = options[-1][3] + 1
                 else:
                     newWord = options[i][0]
-                    newUsed = options[i][3] + 1
                 tweet = tweet + "\n"+newWord
-                cur.execute("update GRAM_"+str(len(initials(newWord.split())))+" set Used=? where Term=?", (newUsed, newWord))
                 tweetWordCount = len([t for t in tweet.split() if len(t) > 0])
-
 
             capTweet = capitalizeTweet(tweet)
             if len(capTweet) < 141:
-                api.update_status(capTweet)
+                # Post the poem
+                if testOnly:
+                    print capTweet
+                else:
+                    api.update_status(capTweet)
+
+                #Update the used counts for this poem's ngrams
+                selectedNgrams = getNgrams(tweet)
+                for ngram in selectedNgrams:
+                    n = len(ngram)
+                    inits = initials(ngram)
+                    term = " ".join(ngram)
+                    cur.execute("select Used from GRAM_"+str(n)+
+                        " where Term = ?", (term,))
+                    rows = cur.fetchall()
+                    for tup in rows: # Should just be a single row...
+                        usedCount = tup[0]
+                        cur.execute("update GRAM_"+str(n)+" set Used = ? "+
+                            "where Term = ?", (usedCount+1, term))
+                    if len(rows) == 0:
+                        cur.execute("insert into GRAM_" + str(n) +
+                                " values (?,?,1,1)", (term, inits))
+                    if testOnly:
+                        print "usage update for", term, inits
+                    conn.commit()
+
             tooLong = len(capTweet) > 140
             tries = tries - 1
-
 
 def usage():
     print "Usage: python acrosticBot.py [config file] [acrostic word] [read or write]"
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if not (len(sys.argv) == 4 or len(sys.argv) == 5):
         usage()
+        sys.exit(0)
 
     config = getConfig(sys.argv[1])
     ckey = config["CONSUMER_KEY"]
@@ -178,7 +220,8 @@ if __name__ == "__main__":
 
     auth = tweepy.OAuthHandler(ckey, csec)
     auth.set_access_token(akey, asec)
-    api = tweepy.API(auth)
+    configapi = tweepy.API(auth)
+    testmode = "test" in sys.argv
 
     if random.randint(1,69) == 69:
         targetWord = "benghazi"
@@ -186,12 +229,12 @@ if __name__ == "__main__":
         targetWord = sys.argv[2].lower().split()[0]
 
     if sys.argv[3] == 'read':
-        scrapeTwitter(targetWord, api, worddb)
-    elif sys.argv[4] == 'write':
-        postTweet(targetWord, api, worddb)
-    elif sys.argv[5] == 'both':
-        scrapeTwitter(targetWord, api, worddb)
-        postTweet(targetWord, api, worddb)
+        scrapeTwitter(targetWord, configapi, worddb)
+    elif sys.argv[3] == 'write':
+        postTweet(targetWord, configapi, worddb, testmode)
+    elif sys.argv[3] == 'both':
+        scrapeTwitter(targetWord, configapi, worddb)
+        postTweet(targetWord, configapi, worddb, testmode)
     else:
         usage()
 
