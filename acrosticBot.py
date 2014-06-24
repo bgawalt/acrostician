@@ -11,7 +11,11 @@ def getConfig(configFile):
     """
     with open(configFile, 'r') as config:
         splitLines = [line.split("=") for line in config.xreadlines()]
-        return {s[0].strip():s[1].strip() for s in splitLines if len(s) == 2}
+        out = {}
+        for s in splitLines:
+            if len(s) == 2:
+                out[s[0].strip()] = s[1].strip()
+        return out
 
 class StoreStatusTextListener(StreamListener):
     """ Records the text of streamed-in statuses in a list field """
