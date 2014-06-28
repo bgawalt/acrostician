@@ -126,15 +126,18 @@ def scoreTup(t):
     inits = t[1]
     pop = t[2]
     used = t[3]
-    raw = len(term)*(float(pop)/(10*used))**(2*len(inits))
+    raw = (pop/(10*used))**(len(inits))
     if "#" in term:
-        return 10*raw
+        score =  10*raw
     else:
-        return raw
+        score = raw
+    return max(score, 1)
 
 def postTweet(target, api, dbpath, testOnly = False):
     targetLen = len(target)
     with sqlite3.connect(dbpath+"/"+target+".db") as conn:
+
+        print target
         cur = conn.cursor()
 
         tooLong = True
@@ -179,10 +182,8 @@ def postTweet(target, api, dbpath, testOnly = False):
             capTweet = capitalizeTweet(tweet)
             if len(capTweet) < 141:
                 # Post the poem
-                if testOnly:
-                    print capTweet
-                else:
-                    api.update_status(capTweet)
+                print capTweet
+                api.update_status(capTweet)
 
                 #Update the used counts for this poem's ngrams
                 selectedNgrams = getNgrams(tweet)
