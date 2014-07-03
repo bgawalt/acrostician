@@ -126,9 +126,9 @@ def scoreTup(t):
     inits = t[1]
     pop = t[2]
     used = t[3]
-    raw = (pop/(10*used))**(len(inits))
+    raw = (len(term)*pop/(10*used*used*used))**(len(inits))
     if "#" in term:
-        score =  10*raw
+        score = 100*raw
     else:
         score = raw
     return max(score, 1)
