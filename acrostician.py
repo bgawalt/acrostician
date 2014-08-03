@@ -128,7 +128,7 @@ def scoreTup(t):
     used = t[3]
     raw = (len(term)*pop/(10*used*used*used))**(len(inits))
     if "#" in term:
-        score = 100*raw
+        score = 2*raw
     else:
         score = raw
     return max(score, 1)
@@ -182,7 +182,10 @@ def postTweet(target, api, dbpath, testOnly = False):
             capTweet = capitalizeTweet(tweet)
             if len(capTweet) < 141:
                 # Post the poem
-                print capTweet
+                try:
+                    print capTweet
+                except:
+                    print "[Trouble printing tweet]"
                 api.update_status(capTweet)
 
                 #Update the used counts for this poem's ngrams
