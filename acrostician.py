@@ -140,10 +140,14 @@ def postTweet(target, api, dbpath, testOnly = False):
         print target
         cur = conn.cursor()
 
-        tooLong = True
+        cur.execute("create table if not exists TWEETED (Tweet text)")
+        cur.execute("create unique index if not exists IDX_TEXT "+
+                    "on TWEETED(Tweet)")
+
+        notYetPosted = True
         tries = 100
 
-        while tooLong and tries > 0:
+        while notYetPosted and tries > 0:
             tweet = ""
             tweetWordCount = len([t for t in tweet.split() if len(t) > 0])
             while tweetWordCount < targetLen:
@@ -180,13 +184,26 @@ def postTweet(target, api, dbpath, testOnly = False):
                 tweetWordCount = len([t for t in tweet.split() if len(t) > 0])
 
             capTweet = capitalizeTweet(tweet)
-            if len(capTweet) < 141:
+            lengthCheck = len(capTweet) < 141 # Check the length's okay
+
+            dupeCheck = True  # Assume it's not a dupe...
+            for row in cur.execute("select Tweet from TWEETED where Tweet = ?",
+                                    (capTweet.lower(),)):
+                print "Duplicate... trying again"
+                dupeCheck = False #But if it is, don't post it
+                break
+
+            if lengthCheck and dupeCheck:
                 # Post the poem
                 try:
                     print capTweet
                 except:
                     print "[Trouble printing tweet]"
                 api.update_status(capTweet)
+                notYetPosted = False
+
+                #Add the tweet to our list of already-posted
+                cur.execute("insert into TWEETED values (?)", capTweet.lower())
 
                 #Update the used counts for this poem's ngrams
                 selectedNgrams = getNgrams(tweet)
@@ -208,11 +225,12 @@ def postTweet(target, api, dbpath, testOnly = False):
                         print "usage update for", term, inits
                     conn.commit()
 
-            tooLong = len(capTweet) > 140
             tries = tries - 1
+        print tries, "tries left"
 
 def usage():
-    print "Usage: python acrosticBot.py [config file] [acrostic word] [read or write]"
+    print ("Usage: python acrosticBot.py [config file] "+
+            "[acrostic word] [read or write]")
 
 if __name__ == "__main__":
     if not (len(sys.argv) == 4 or len(sys.argv) == 5):
