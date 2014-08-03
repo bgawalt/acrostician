@@ -70,7 +70,7 @@ def scrapeTwitter(acrostic, api, dbpath):
         print "Problem after", len(l.texts)
   
     print len(l.texts), "tweets scraped"
-    with sqlite3.connect(dbpath+"/"+acrostic+".db") as conn:
+    with sqlite3.connect(dbpath+"/acrostician.db") as conn:
         cur = conn.cursor()
 
         for n in xrange(1, acrosN+1):
@@ -135,7 +135,7 @@ def scoreTup(t):
 
 def postTweet(target, api, dbpath, testOnly = False):
     targetLen = len(target)
-    with sqlite3.connect(dbpath+"/"+target+".db") as conn:
+    with sqlite3.connect(dbpath+"/acrostician.db") as conn:
 
         print target
         cur = conn.cursor()
