@@ -83,25 +83,31 @@ def scrapeTwitter(acrostic, api, dbpath):
                         " on GRAM_"+s+" (Initials);")
             conn.commit()
 
+        ngramCounts = {}
         for text in l.texts:
             ngrams = [s for s in getNgrams(text) if initials(s) in subAcros]
             for n in ngrams:
                 term = " ".join(n)
                 if "http" in term.lower() or acrostic in term.lower():
                     continue
-                inits = initials(n)
-                cur.execute("select Count from GRAM_" + str(len(n)) +
+                ngramCounts[n] = ngramCounts.get(n,0) + 1
+        i = 1
+        for n in ngramCounts:
+            inits = initials(n)
+            cur.execute("select Count from GRAM_" + str(len(n)) +
                             " where Term=:term", {"term": term})
-                results = cur.fetchall()
-                if len(results) == 0:
-                    count = 1
-                    cur.execute("insert into GRAM_" + str(len(n)) +
+            results = cur.fetchall()
+            if len(results) == 0:
+                count = ngramCounts[n]
+                cur.execute("insert into GRAM_" + str(len(n)) +
                                 " values (?,?,?,1)", (term, inits, count))
-                else: 
-                    count = 1 + results[0][0]
-                    cur.execute("update GRAM_" + str(len(n)) +
+            else:
+                count = ngramCounts[n] + results[0][0]
+                cur.execute("update GRAM_" + str(len(n)) +
                                 " set Count=? where Term=?", (count, term))
+            if i % 100 == 0:
                 conn.commit()
+            i = i + 1
         conn.commit()
 
 def capitalizeTweet(tw):
