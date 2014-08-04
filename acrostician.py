@@ -208,9 +208,6 @@ def postTweet(target, api, dbpath, testOnly = False):
                 api.update_status(capTweet)
                 notYetPosted = False
 
-                #Add the tweet to our list of already-posted
-                cur.execute("insert into TWEETED values (?)", capTweet.lower())
-
                 #Update the used counts for this poem's ngrams
                 selectedNgrams = getNgrams(tweet)
                 for ngram in selectedNgrams:
@@ -229,6 +226,9 @@ def postTweet(target, api, dbpath, testOnly = False):
                                 " values (?,?,1,1)", (term, inits))
                     if testOnly:
                         print "usage update for", term, inits
+                        #Add the tweet to our list of already-posted
+                        cur.execute("insert into TWEETED values (?)",
+                                    (capTweet.lower(),))
                     conn.commit()
 
             tries = tries - 1
