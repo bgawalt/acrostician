@@ -40,7 +40,9 @@ class Wikipedia(object):
         comment_free = re.sub("&lt;!--.*?--&gt;", "", ref_free, flags=re.DOTALL)
         curly_free = re.sub("\{\{.*?\}\}", "", comment_free, flags=re.DOTALL)
         nonsense_free = re.sub("&lt;.*?&gt;", "", curly_free)
-        return Wikipedia.resolve_brackets(nonsense_free)
+        quote_fix = re.sub("&quot;", '"', nonsense_free)
+        amp_fix = re.sub("&amp;", "&", quote_fix)
+        return Wikipedia.resolve_brackets(amp_fix)
 
     def yield_page(self, clean=True):
         page_lines = []
@@ -67,8 +69,6 @@ class Wikipedia(object):
 if __name__ == "__main__":
     wiki = Wikipedia(sys.argv[1])
     page = wiki.yield_page()
-    count = 0
-    while len(page) > 0 and count < 100:
-        print page, "\n\n===\n\n"
+    while len(page) > 0:
+        print page, "\n\n\n\n"
         page = wiki.yield_page("dirty" not in sys.argv)
-        count += 1

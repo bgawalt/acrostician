@@ -8,6 +8,7 @@ Keep an in-memory map, then, when it gets too big, save all the ngram counts to 
 """
 
 import re
+import os
 
 _NGRAM_LIMIT = 5
 
@@ -25,12 +26,11 @@ class NGram(object):
             if len(t) == 0:
                 raise ValueError("Supplied empty term in list %s" % (str(terms),))
         self.ngram = " ".join(terms)
-        self.initials = tuple(t[0] for t in terms)
+        self.initials = "".join(t[0] for t in terms)
 
     @staticmethod
     def clean_term(term):
-        return re.sub("(^[^a-z])|([^a-z]$)", "", term)
-
+        return re.sub("(^[^a-zA-Z]+)|([^a-zA-Z]+$)", "", term)
 
     @staticmethod
     def parse_sentence_to_ngrams(text):
@@ -40,6 +40,7 @@ class NGram(object):
         for a in xrange(n):
             for b in xrange(a+1, n):
                 ngrams.append(NGram([NGram.clean_term(t) for t in sptext[a:b]]))
+        return ngrams
 
 
 
@@ -80,7 +81,7 @@ class InitialNGrams(object):
         return "%s\t%d\n" % (ngram, count)
 
     def append_to_file_and_reset(self, dir_path):
-        infilename = "%s/%s.txt" % (dir_path, self._initials)
+        infilename = "%s/%d_%s.txt" % (dir_path, len(self._initials), self._initials)
         outfilename = "%s/TMP_%s.txt" % (dir_path, self._initials)
         with open(outfilename, 'w') as outfile:
             with open(infilename, 'r') as infile:
@@ -93,6 +94,7 @@ class InitialNGrams(object):
                         outfile.write(InitialNGrams.create_file_line(ngram, new_count))
             for ngram, count in self._ngrams.iteritems():
                 outfile.write(InitialNGrams.create_file_line(ngram, count))
+        os.rename(outfilename, infilename)
         self._ngrams = {}
 
 

@@ -1,3 +1,4 @@
+*.pyc
 scratch/
 .idea/
 .DS_Store
