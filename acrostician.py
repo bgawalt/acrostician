@@ -1,8 +1,8 @@
 import random
 import sqlite3
 import sys
+import time
 import tweepy
-
 from tweepy.streaming import StreamListener
 from tweepy import Stream
 from tweepy.api import API
@@ -19,12 +19,28 @@ def get_config(config_file):
         for s in split_lines:
             if len(s) == 2:
                 out[s[0].strip()] = s[1].strip()
-        return out
+    return out
+
+
+def get_target_follower(api):
+    best = 1.1
+    target_id = -1
+    id_gen = tweepy.Cursor(api.followers_ids, screen_name="Acrostician").pages()
+    for id_page in id_gen:
+        for id_num in id_page:
+            r = random.random()
+            if r < best:
+                best = r
+            target_id = id_num
+        time.sleep(2)
+    if target_id > 0:
+        return api.get_user(target_id).screen_name
+    raise ValueError("Couldn't select a follower")
 
 
 class StoreStatusTextListener(StreamListener):
     """ Records the text of streamed-in statuses in a list field """
-    
+
     def __init__(self, api, limit=5):
         self.texts = set()
         self.myLimit = limit
@@ -40,8 +56,7 @@ class StoreStatusTextListener(StreamListener):
 
 def subseqs(s):
     for a in xrange(len(s)):
-        for b in xrange(a+1, len(s)+1):
-            yield s[a:b]
+        yield s[a:]
 
 
 def first_char(word):
@@ -67,30 +82,29 @@ def initials(words):
 
 
 def scrape_twitter(acrostic, api, dbpath):
-    
     sub_acros = set(subseqs(acrostic))
     acros_n = len(acrostic)
-    
+
     l = StoreStatusTextListener(api, limit=10000)
     try:
         stream = Stream(auth, l, timeout=5.0)
         stream.filter(track=("a", "of", "the", "it", "i"), languages=("en",))
     except:
         print "Problem after", len(l.texts)
-  
+
     print len(l.texts), "tweets scraped"
-    with sqlite3.connect(dbpath+"/acrostician.db") as conn:
+    with sqlite3.connect(dbpath + "/acrostician.db") as conn:
         cur = conn.cursor()
 
-        for n in xrange(1, acros_n+1):
+        for n in xrange(1, acros_n + 1):
             s = str(n)
             cur.execute("create table if not exists GRAM_" + s +
                         " (Term text, Initials text, Count integer, "
                         "Used integer);")
             cur.execute("create unique index if not exists IDX_TERM_GRAM_" + s +
-                        " on GRAM_"+s+" (Term);")
+                        " on GRAM_" + s + " (Term);")
             cur.execute("create index if not exists IDX_INIT_GRAM_" + s +
-                        " on GRAM_"+s+" (Initials);")
+                        " on GRAM_" + s + " (Initials);")
             conn.commit()
 
         ngram_counts = {}
@@ -119,7 +133,7 @@ def scrape_twitter(acrostic, api, dbpath):
             if i % 100 == 0:
                 conn.commit()
             i += 1
-        conn.commit()
+            conn.commit()
 
 
 def capitalize_tweet(tw):
@@ -127,7 +141,7 @@ def capitalize_tweet(tw):
     out = []
     for w in sp_tw:
         if w[0] == "#":
-            x = "#"+w[1:].capitalize()
+            x = "#" + w[1:].capitalize()
         else:
             x = w.capitalize()
         out.append(x)
@@ -145,9 +159,9 @@ def score_tup(t):
     inits = t[1]
     pop = t[2]
     used = t[3]
-    raw = (len(term)*pop/(10*used*used*used))**(len(inits))
+    raw = (len(term) * pop / (10 * used * used * used)) ** (len(inits))
     if "#" in term:
-        score = 2*raw
+        score = 2 * raw
     else:
         score = raw
     return max(score, 1)
@@ -155,7 +169,7 @@ def score_tup(t):
 
 def post_tweet(target, api, dbpath, test_only=False):
     target_len = len(target)
-    with sqlite3.connect(dbpath+"/acrostician.db") as conn:
+    with sqlite3.connect(dbpath + "/acrostician.db") as conn:
 
         print target
         cur = conn.cursor()
@@ -181,27 +195,27 @@ def post_tweet(target, api, dbpath, test_only=False):
                                 " where Initials=? order by " +
                                 "random() limit 200",
                                 (desired_inits[:words_left],))
-                    for tup in cur.fetchall():
-                        if target not in tup[0]:
-                            options.append(tup)
-                    words_left -= 1
+                for tup in cur.fetchall():
+                    if target not in tup[0]:
+                        options.append(tup)
+                        words_left -= 1
                 if len(options) == 0:
                     print "No options left", tweet, desired_inits
                     raise RuntimeError
                 total_count = int(sum([score_tup(o) for o in options]))
 
-                r = random.randint(1, total_count)
-                i = 0
-                while i < len(options):
-                    r = r - score_tup(options[i])
-                    if r <= 0:
-                        break
-                    i += 1
+            r = random.randint(1, total_count)
+            i = 0
+            while i < len(options):
+                r = r - score_tup(options[i])
+                if r <= 0:
+                    break
+                i += 1
                 if r > 0:
                     new_word = options[-1][0]
                 else:
                     new_word = options[i][0]
-                tweet = tweet + "\n"+new_word
+                tweet = tweet + "\n" + new_word
                 tweet_word_count = len([t for t in tweet.split() if len(t) > 0])
 
             cap_tweet = capitalize_tweet(tweet)
@@ -229,32 +243,33 @@ def post_tweet(target, api, dbpath, test_only=False):
                     n = len(ngram)
                     inits = initials(ngram)
                     term = " ".join(ngram)
-                    cur.execute("select Used from GRAM_"+str(n) +
+                    cur.execute("select Used from GRAM_" + str(n) +
                                 " where Term = ?", (term,))
                     rows = cur.fetchall()
                     for tup in rows:  # Should just be a single row...
                         used_count = tup[0]
-                        cur.execute("update GRAM_"+str(n)+" set Used = ? " +
-                                    "where Term = ?", (used_count+1, term))
-                    if len(rows) == 0:
-                        cur.execute("insert into GRAM_" + str(n) +
-                                    " values (?,?,1,1)", (term, inits))
+                        cur.execute("update GRAM_" + str(n) + " set Used = ? " +
+                                    "where Term = ?", (used_count + 1, term))
+                        if len(rows) == 0:
+                            cur.execute("insert into GRAM_" + str(n) +
+                                        " values (?,?,1,1)", (term, inits))
                     if test_only:
                         print "usage update for", term, inits
-                        # Add the tweet to our list of already-posted
-                        cur.execute("insert into TWEETED values (?)",
-                                    (cap_tweet.lower(),))
+                    # Add the tweet to our list of already-posted
+                    cur.execute("insert into TWEETED values (?)",
+                                (cap_tweet.lower(),))
                     conn.commit()
 
             tries -= 1
-        print tries, "tries left"
+            print tries, "tries left"
 
 
 def usage():
-    print ("Usage: python acrosticBot.py [config file] "
-           "[acrostic word] [read or write]")
+  print ("Usage: python acrosticBot.py [config file] "
+         "[acrostic word] [read or write]")
 
-if __name__ == "__main__":
+
+def main():
     if not (len(sys.argv) == 4 or len(sys.argv) == 5):
         usage()
         sys.exit(0)
@@ -272,16 +287,35 @@ if __name__ == "__main__":
     testmode = "test" in sys.argv
 
     if random.randint(1, 69) == 69:
-        targetWord = "benghazi"
+        target_word = "benghazi"
     else:
-        targetWord = sys.argv[2].lower().split()[0]
+        target_word = sys.argv[2].lower().split()[0]
 
     if sys.argv[3] == 'read':
-        scrape_twitter(targetWord, configapi, worddb)
+        scrape_twitter(target_word, configapi, worddb)
     elif sys.argv[3] == 'write':
-        post_tweet(targetWord, configapi, worddb, testmode)
+        post_tweet(target_word, configapi, worddb, testmode)
     elif sys.argv[3] == 'both':
-        scrape_twitter(targetWord, configapi, worddb)
-        post_tweet(targetWord, configapi, worddb, testmode)
+        scrape_twitter(target_word, configapi, worddb)
+        post_tweet(target_word, configapi, worddb, testmode)
     else:
         usage()
+
+
+if __name__ == "__main__":
+    # main()
+    if not (len(sys.argv) == 4 or len(sys.argv) == 5):
+        usage()
+        sys.exit(0)
+
+    config = get_config(sys.argv[1])
+    ckey = config["CONSUMER_KEY"]
+    csec = config["CONSUMER_SECRET"]
+    akey = config["ACCESS_KEY"]
+    asec = config["ACCESS_SECRET"]
+
+    auth = tweepy.OAuthHandler(ckey, csec)
+    auth.set_access_token(akey, asec)
+    configapi = tweepy.API(auth)
+
+    print get_target_follower(configapi)
