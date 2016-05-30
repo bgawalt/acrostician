@@ -34,14 +34,14 @@ class NGram(object):
 
     @staticmethod
     def parse_sentence_to_ngrams(text):
-        sptext = text.lower().split()
-        n = len(sptext)
+        clean_terms = [NGram.clean_term(t) for t in text.lower().split()]
+        clean_nonempty = [c for c in clean_terms if len(c) > 0]
+        n = len(clean_nonempty)
         ngrams = []
         for a in xrange(n):
-            for b in xrange(a+1, n):
-                ngrams.append(NGram([NGram.clean_term(t) for t in sptext[a:b]]))
+            for b in xrange(a+1, min([n+1, a + _NGRAM_LIMIT + 1])):
+                ngrams.append(NGram([c for c in clean_nonempty[a:b]]))
         return ngrams
-
 
 
 class InitialNGrams(object):
