@@ -43,16 +43,27 @@ class NGram(object):
                 ngrams.append(NGram([c for c in clean_nonempty[a:b]]))
         return ngrams
 
+    @staticmethod
+    def parse_sentence_suffix_to_ngrams(text):
+        clean_terms = [NGram.clean_term(t) for t in text.lower().split()[-1*_NGRAM_LIMIT:]]
+        clean_nonempty = [c for c in clean_terms if len(c) > 0]
+        n = len(clean_nonempty)
+        ngrams = []
+        for a in xrange(n):
+            ngrams.append(NGram(clean_nonempty[a:]))
+        return ngrams
+
 
 class InitialNGrams(object):
     """
-    A collection of n-grams and the number of times each has been seen.
+    A family of n-grams who all share the same initials and the number of times each ngram has been seen.
+    Comes with a specific file format for serializing a family to disk: `ngram [tab] count [end of line]`.
     """
     def __init__(self, initials):
         if len(initials) > _NGRAM_LIMIT:
             raise ValueError("The length of initials '%s' exceeds ngram limit of %d" % (initials, _NGRAM_LIMIT))
-        self._initials = initials
-        self._ngrams = {}
+        self.initials = initials
+        self.ngrams = {}
 
     def add_ngram(self, ngram):
         """
@@ -60,42 +71,63 @@ class InitialNGrams(object):
         :return: 1 if ngram is new to this collection, 0 else
         :raises: Value error if ngram's initials don't match this collection's initials
         """
-        if ngram.initials != self._initials:
-            raise ValueError("Expected initials '%s', received initials '%s'" % (self._initials, ngram.initials))
-        dupe = 1 if ngram.ngram in self._ngrams else 0
-        self._ngrams[ngram.ngram] = self._ngrams.get(ngram.ngram, 0) + 1
+        if ngram.initials != self.initials:
+            raise ValueError("Expected initials '%s', received initials '%s'" % (self.initials, ngram.initials))
+        dupe = 1 if ngram.ngram in self.ngrams else 0
+        self.ngrams[ngram.ngram] = self.ngrams.get(ngram.ngram, 0) + 1
         return dupe
 
     def size(self):
-        return len(self._ngrams)
+        return len(self.ngrams)
 
     @staticmethod
     def parse_file_line(line):
+        """
+        Turn the lines from a file of this specifics InitialNGrams family format into NGram objects.
+        :param line: Line from the file.
+        :return: 2-tuple: An NGram, and the count associated with it.
+        :raises: ValueError: if there's more than one tab character in `line`
+        """
         spline = line.split("\t")
-        ngram = spline[0]
+        if len(spline) != 2:
+            raise ValueError("Incorrect number of tabs in line '%s'", line.strip())
+        ngram = NGram(spline[0].split())
         count = int(spline[1])
         return ngram, count
 
     @staticmethod
     def create_file_line(ngram, count):
-        return "%s\t%d\n" % (ngram, count)
+        """
+        Turn an NGram and its current frequency count into a line of text suitable for storing in a file.
+        Format: ngram string [tab] count [end of line]
+        :param ngram: NGram object
+        :param count:
+        :return: String encoding this ngram and its frequency count
+        """
+        return "%s\t%d\n" % (re.sub("\\s+", " ", ngram.ngram), count)
 
     def append_to_file_and_reset(self, dir_path):
-        infilename = "%s/%d_%s.txt" % (dir_path, len(self._initials), self._initials)
-        outfilename = "%s/TMP_%s.txt" % (dir_path, self._initials)
+        """
+        Store the ngrams in this initial-family to a file. If the file is already populated, increment the file's counts
+        with the counts currently stored in this object. The name of the file will be '[X]_[initials].txt`, where
+        X is the number of tokens in the ngram, and [initials] is the initials.
+        :param dir_path: Path to the directory to find the file.
+        """
+        infilename = "%s/%d_%s.txt" % (dir_path, len(self.initials), self.initials)
+        outfilename = "%s/TMP_%s.txt" % (dir_path, self.initials)
         with open(outfilename, 'w') as outfile:
             with open(infilename, 'r') as infile:
                 for line in infile:
                     ngram, existing_count = InitialNGrams.parse_file_line(line)
-                    if ngram not in self._ngrams:
+                    if ngram not in self.ngrams:
                         outfile.write(line)
                     else:
-                        new_count = existing_count + self._ngrams.pop(ngram)
+                        new_count = existing_count + self.ngrams.pop(ngram)
                         outfile.write(InitialNGrams.create_file_line(ngram, new_count))
-            for ngram, count in self._ngrams.iteritems():
+            for ngram, count in self.ngrams.iteritems():
                 outfile.write(InitialNGrams.create_file_line(ngram, count))
         os.rename(outfilename, infilename)
-        self._ngrams = {}
+        self.ngrams = {}
 
 
 class NGramCorpora(object):
@@ -105,6 +137,7 @@ class NGramCorpora(object):
     """
     def __init__(self, dir_path, max_count):
         self._initials = {}
+        self._current_count = 0
         self._total_count = 0
         self._dir_path = dir_path
         self._max_count = max_count
@@ -113,15 +146,21 @@ class NGramCorpora(object):
         family = self._initials.get(ngram.initials, InitialNGrams(ngram.initials))
         increase = family.add_ngram(ngram)
         self._initials = family
+        self._current_count += increase
         self._total_count += increase
-        if self._total_count > self._max_count:
+        if self._current_count > self._max_count:
+            print "Dumping %d ngrams to file..." % (self._current_count,)
             self.dump_to_file()
+            print "... complete. Dumped %d ngrams total." % (self._total_count,)
 
     def dump_to_file(self):
         for initials in self._initials:
             family = self._initials.pop(initials)
             family.append_to_file_and_reset(self._dir_path)
-        self._total_count = 0
+        self._current_count = 0
+
+    def add_sentence(self, text):
+        ngrams = NGram.parse_sentence_to_ngrams(text)
 
 
 
