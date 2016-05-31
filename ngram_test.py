@@ -1,4 +1,5 @@
 import unittest
+import os
 import ngram_lookup
 
 
@@ -108,9 +109,71 @@ class TestInitialNGrams(unittest.TestCase):
 
     def test_parse_file_line(self):
         ng, c = ngram_lookup.InitialNGrams.parse_file_line("another bad creation\t45\n")
-        self.assertEqual(ng.ngram, "another bad creation")
-        self.assertEqual(ng.initials, "abc")
+        self.assertEqual(ng, "another bad creation")
         self.assertEqual(c, 45)
+
+        with self.assertRaises(ValueError):
+            ngram_lookup.InitialNGrams.parse_file_line("another\tbad creation\t45\n")
+        with self.assertRaises(ValueError):
+            ngram_lookup.InitialNGrams.parse_file_line("another bad creation 45")
+        with self.assertRaises(ValueError):
+            ngram_lookup.InitialNGrams.parse_file_line("another bad creation\tforty five\n")
+
+    def test_create_file_line(self):
+        line1 = ngram_lookup.InitialNGrams.create_file_line("andrew bullwinkle carnegie", 45)
+        self.assertEqual(line1, "andrew bullwinkle carnegie\t45\n")
+
+        line2 = ngram_lookup.InitialNGrams.create_file_line("andr\n ew bull   winkle carn\tegie", 46)
+        # TODO This is a bad outcome!! We should scrub whitespace from the tokens at time of NGram creation!!
+        self.assertEqual(line2, "andr ew bull winkle carn egie\t46\n")
+
+    def test_parse_family_filename(self):
+        path1 = "/tmp/3_abc.txt"
+        path2 = "/tmp/foo/5_defgh.txt"
+        path3 = "/tmp/foo/bar/1_x.txt"
+        path4 = "4_lmno.txt"
+        self.assertEqual(ngram_lookup.InitialNGrams.parse_family_filename(path1), ("abc", "/tmp"))
+        self.assertEqual(ngram_lookup.InitialNGrams.parse_family_filename(path2), ("defgh", "/tmp/foo"))
+        self.assertEqual(ngram_lookup.InitialNGrams.parse_family_filename(path3), ("x", "/tmp/foo/bar"))
+        self.assertEqual(ngram_lookup.InitialNGrams.parse_family_filename(path4), ("lmno", ""))
+        with self.assertRaises(ValueError):
+            ngram_lookup.InitialNGrams.parse_family_filename("baz/some_file.txt")
+        with self.assertRaises(ValueError):
+            ngram_lookup.InitialNGrams.parse_family_filename("hup/5_ab3de.txt")
+        with self.assertRaises(ValueError):
+            ngram_lookup.InitialNGrams.parse_family_filename("noooo/please/6_abcdEf.txt")
+        with self.assertRaises(ValueError):
+            ngram_lookup.InitialNGrams.parse_family_filename("this/is/boring/6_abcd.txt")
+
+    def test_file_save_and_load(self):
+        family1 = ngram_lookup.InitialNGrams("abc")
+        ng11 = ngram_lookup.NGram(["always", "be", "closing"])
+        ng12 = ngram_lookup.NGram(["already", "been", "chewed"])
+        ng13 = ngram_lookup.NGram(["alcoholic", "beverage", "control"])
+        ng14 = ngram_lookup.NGram(["alabama", "bean", "chowder"])
+        k = 0
+        for ng in (ng11, ng12, ng13, ng14):
+            for _ in xrange(k+1):
+                family1.add_ngram(ng)
+            k += 1
+        self.assertEqual(family1.size(), 4)
+        family1.append_to_file_and_reset("/tmp")
+        self.assertEqual(family1.size(), 0)
+        self.assertFalse(os.path.isfile("/tmp/TMP_abc.txt"))
+        self.assertTrue(os.path.isfile("/tmp/3_abc.txt"))
+
+        family2 = ngram_lookup.InitialNGrams("def")
+        ng21 = ngram_lookup.NGram(["don't", "ever", "forget"])
+        ng22 = ngram_lookup.NGram(["ducks", "eat", "funny"])
+        ng23 = ngram_lookup.NGram(["didn't", "exactly", "follow"])
+        ng24 = ngram_lookup.NGram(["dozen", "egg", "formula"])
+        for ng in (ng21, ng22, ng23, ng24):
+            for _ in xrange(k+1):
+                family2.add_ngram(ng)
+            k += 1
+
+
+
 
 
 

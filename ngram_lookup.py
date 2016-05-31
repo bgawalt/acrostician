@@ -85,13 +85,13 @@ class InitialNGrams(object):
         """
         Turn the lines from a file of this specifics InitialNGrams family format into NGram objects.
         :param line: Line from the file.
-        :return: 2-tuple: An NGram, and the count associated with it.
+        :return: 2-tuple: A string for the ngram (NOT an NGram object), and the count associated with it.
         :raises: ValueError: if there's more than one tab character in `line`
         """
         spline = line.split("\t")
         if len(spline) != 2:
             raise ValueError("Incorrect number of tabs in line '%s'", line.strip())
-        ngram = NGram(spline[0].split())
+        ngram = spline[0]
         count = int(spline[1])
         return ngram, count
 
@@ -100,11 +100,14 @@ class InitialNGrams(object):
         """
         Turn an NGram and its current frequency count into a line of text suitable for storing in a file.
         Format: ngram string [tab] count [end of line]
-        :param ngram: NGram object
+        :param ngram: Single ngram string
         :param count:
         :return: String encoding this ngram and its frequency count
         """
-        return "%s\t%d\n" % (re.sub("\\s+", " ", ngram.ngram), count)
+        return "%s\t%d\n" % (re.sub("\\s+", " ", ngram), count)
+
+    def filename(self, dir_path):
+        return "%s/%d_%s.txt" % (dir_path, len(self.initials), self.initials)
 
     def append_to_file_and_reset(self, dir_path):
         """
@@ -113,21 +116,44 @@ class InitialNGrams(object):
         X is the number of tokens in the ngram, and [initials] is the initials.
         :param dir_path: Path to the directory to find the file.
         """
-        infilename = "%s/%d_%s.txt" % (dir_path, len(self.initials), self.initials)
+        infilename = self.filename(dir_path)
         outfilename = "%s/TMP_%s.txt" % (dir_path, self.initials)
         with open(outfilename, 'w') as outfile:
-            with open(infilename, 'r') as infile:
-                for line in infile:
-                    ngram, existing_count = InitialNGrams.parse_file_line(line)
-                    if ngram not in self.ngrams:
-                        outfile.write(line)
-                    else:
-                        new_count = existing_count + self.ngrams.pop(ngram)
-                        outfile.write(InitialNGrams.create_file_line(ngram, new_count))
+            if os.path.isfile(infilename):
+                with open(infilename, 'r') as infile:
+                    for line in infile:
+                        ngram, existing_count = InitialNGrams.parse_file_line(line)
+                        if ngram not in self.ngrams:
+                            outfile.write(line)
+                        else:
+                            new_count = existing_count + self.ngrams.pop(ngram)
+                            outfile.write(InitialNGrams.create_file_line(ngram, new_count))
             for ngram, count in self.ngrams.iteritems():
                 outfile.write(InitialNGrams.create_file_line(ngram, count))
         os.rename(outfilename, infilename)
         self.ngrams = {}
+
+    @staticmethod
+    def parse_family_filename(filename):
+        """
+        Generate the initials and dirpath from a valid file name.
+        :param filename: path/to/file/5_abcde.txt
+        :return: initials, dir_path
+        """
+        dir_path, fname = os.path.split(filename)
+        if not re.match("\d+_[a-z]+\.txt", fname):
+            raise ValueError("File name format mismatch for %s" % (filename,))
+        sfname = fname[:-4].split("_")
+        num_inits = int(sfname[0])
+        inits = sfname[1]
+        if len(inits) != num_inits:
+            raise ValueError("Number of initials doesn't match numerals in file name %s" % (filename,))
+        return inits, dir_path.rstrip("/")
+
+    @staticmethod
+    def from_file(filename):
+        return True
+
 
 
 class NGramCorpora(object):
