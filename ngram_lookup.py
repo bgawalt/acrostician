@@ -65,16 +65,17 @@ class InitialNGrams(object):
         self.initials = initials
         self.ngrams = {}
 
-    def add_ngram(self, ngram):
+    def add_ngram(self, ngram, count=1):
         """
         :param ngram: an NGram object whose initials match
+        :param count: Number of times ngram seen
         :return: 1 if ngram is new to this collection, 0 else
         :raises: Value error if ngram's initials don't match this collection's initials
         """
         if ngram.initials != self.initials:
             raise ValueError("Expected initials '%s', received initials '%s'" % (self.initials, ngram.initials))
         dupe = 1 if ngram.ngram in self.ngrams else 0
-        self.ngrams[ngram.ngram] = self.ngrams.get(ngram.ngram, 0) + 1
+        self.ngrams[ngram.ngram] = self.ngrams.get(ngram.ngram, 0) + count
         return dupe
 
     def size(self):
@@ -152,8 +153,14 @@ class InitialNGrams(object):
 
     @staticmethod
     def from_file(filename):
-        return True
-
+        initials, dir_path = InitialNGrams.parse_family_filename(filename)
+        ing = InitialNGrams(initials)
+        with open(filename, 'r') as infile:
+            for line in infile:
+                ngram_str, count = InitialNGrams.parse_file_line(line)
+                ngram = NGram(ngram_str.split())
+                ing.add_ngram(ngram, count)
+        return ing
 
 
 class NGramCorpora(object):
@@ -186,7 +193,10 @@ class NGramCorpora(object):
         self._current_count = 0
 
     def add_sentence(self, text):
-        ngrams = NGram.parse_sentence_to_ngrams(text)
+        for ngram in NGram.parse_sentence_to_ngrams(text):
+            ing = self._initials.get(ngram.initials, InitialNGrams(ngram.initials))
+            ing.add_ngram(ngram)
+            self._initials[ing.initials] = ing
 
 
 

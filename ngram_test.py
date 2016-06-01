@@ -96,9 +96,9 @@ class TestInitialNGrams(unittest.TestCase):
         self.assertEqual(d3, 0)
         self.assertEqual(family.size(), 3)
 
-        d4 = family.add_ngram(ng4)
+        d4 = family.add_ngram(ng4, count=7)
         self.assertDictEqual(family.ngrams,
-                             {"always be closing": 2, "already been chewed": 1, "alcoholic beverage control": 1})
+                             {"always be closing": 8, "already been chewed": 1, "alcoholic beverage control": 1})
         self.assertEqual(d4, 1)
         self.assertEqual(family.size(), 3)
 
@@ -147,6 +147,13 @@ class TestInitialNGrams(unittest.TestCase):
 
     def test_file_save_and_load(self):
         family1 = ngram_lookup.InitialNGrams("abc")
+        try:
+            os.remove(family1.filename("/tmp"))
+        except OSError, oe:
+            if oe.errno == 2:
+                pass
+            else:
+                raise oe
         ng11 = ngram_lookup.NGram(["always", "be", "closing"])
         ng12 = ngram_lookup.NGram(["already", "been", "chewed"])
         ng13 = ngram_lookup.NGram(["alcoholic", "beverage", "control"])
@@ -163,6 +170,13 @@ class TestInitialNGrams(unittest.TestCase):
         self.assertTrue(os.path.isfile("/tmp/3_abc.txt"))
 
         family2 = ngram_lookup.InitialNGrams("def")
+        try:
+            os.remove(family2.filename("/tmp"))
+        except OSError, oe:
+            if oe.errno == 2:
+                pass
+            else:
+                raise oe.message
         ng21 = ngram_lookup.NGram(["don't", "ever", "forget"])
         ng22 = ngram_lookup.NGram(["ducks", "eat", "funny"])
         ng23 = ngram_lookup.NGram(["didn't", "exactly", "follow"])
@@ -171,6 +185,26 @@ class TestInitialNGrams(unittest.TestCase):
             for _ in xrange(k+1):
                 family2.add_ngram(ng)
             k += 1
+        self.assertEqual(family2.size(), 4)
+        family2.append_to_file_and_reset("/tmp")
+        self.assertEqual(family2.size(), 0)
+        self.assertFalse(os.path.isfile("/tmp/TMP_def.txt"))
+        self.assertTrue(os.path.isfile("/tmp/3_def.txt"))
+
+        ng15 = ngram_lookup.NGram(["angry", "birds", "champion"])
+        family1.add_ngram(ng15, 2)
+        family1.add_ngram(ng11, 1)
+        self.assertEqual(family1.size(), 2)
+        family1.append_to_file_and_reset("/tmp")
+        self.assertEqual(family1.size(), 0)
+
+        family3 = ngram_lookup.InitialNGrams.from_file(family1.filename("/tmp"))
+        self.assertDictEqual(family3.ngrams,
+                             {"always be closing": 2, "already been chewed": 2, "alcoholic beverage control": 3,
+                              "alabama bean chowder": 4, "angry birds champion": 2})
+
+        os.remove(family1.filename("/tmp"))
+        os.remove(family2.filename("/tmp"))
 
 
 

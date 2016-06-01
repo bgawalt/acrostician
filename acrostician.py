@@ -42,6 +42,7 @@ class StoreStatusTextListener(StreamListener):
     """ Records the text of streamed-in statuses in a list field """
 
     def __init__(self, api, limit=5):
+        StreamListener.__init__(self)
         self.texts = set()
         self.myLimit = limit
         self.api = api or API()
